@@ -38,7 +38,7 @@ export interface Config {
   /** Whether to show elapsed time (default: false) */
   showElapsed: boolean;
 
-  /** Whether to show the prompt cache hit rate (default: true) */
+  /** Whether to show the prompt cache hit rate, session-wide in the TUI (default: true) */
   showCacheHit: boolean;
   /** Whether to show time to first token in the footer (default: false) */
   showTtft: boolean;

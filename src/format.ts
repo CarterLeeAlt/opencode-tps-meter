@@ -63,18 +63,11 @@ export function formatCachePercent(ratio: number): string {
   return `${ratio < 1 && percent > 99 ? 99 : percent}%`;
 }
 
-/** Formats the latest step's cache hit rate as a whole-percent string, e.g. "91%". */
-export function formatCacheHit(reading: MeterReading): string | null {
-  const ratio = cacheHitRatio(reading);
-  return ratio === null ? null : formatCachePercent(ratio);
-}
-
 /**
  * Session-wide cache hit rate, aggregated over every reported step.
  *
- * Unlike `formatCacheHit` (which reflects only the latest step), this survives across
- * steps, so it stays on screen while the next step streams and answers "how much of all
- * prompt tokens this session were cache reads".
+ * This survives across steps, so it stays on screen while the next step streams and
+ * reports the cached share of all prompt tokens accounted for in this session.
  */
 export function formatSessionCacheHit(reading: MeterReading): string | null {
   const ratio = cacheHitRatio({
@@ -122,10 +115,6 @@ export function formatMeterText(reading: MeterReading, config: Config): string {
     parts.push(formatElapsedTime(reading.elapsedMs));
   }
   if (config.showCacheHit) {
-    const cache = formatCacheHit(reading);
-    if (cache !== null) {
-      parts.push(`cache ${cache}`);
-    }
     const sessionCache = formatSessionCacheHit(reading);
     if (sessionCache !== null) {
       parts.push(`session cache ${sessionCache}`);

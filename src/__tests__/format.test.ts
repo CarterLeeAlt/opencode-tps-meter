@@ -9,7 +9,6 @@ import { describe, expect, it } from "bun:test";
 
 import {
   cacheHitRatio,
-  formatCacheHit,
   formatCachePercent,
   formatSessionCacheHit,
   type MeterReading,
@@ -39,32 +38,21 @@ describe("formatCachePercent", () => {
   });
 });
 
-describe("formatCacheHit", () => {
+describe("formatSessionCacheHit", () => {
   it("stays at 99% when a few prompt tokens were uncached", () => {
     // 12000 cached of 12040 prompt tokens: 99.67%, the reading that used to show as 100%.
-    expect(formatCacheHit(meter({ cacheReadTokens: 12000, inputTokens: 40 }))).toBe("99%");
+    expect(formatSessionCacheHit(meter({ sessionCacheReadTokens: 12000, sessionInputTokens: 40 }))).toBe("99%");
   });
 
   it("shows 100% only when the whole prompt came from cache", () => {
-    expect(formatCacheHit(meter({ cacheReadTokens: 1000, cacheWriteTokens: 0, inputTokens: 0 }))).toBe("100%");
-  });
-
-  it("counts cache writes on the prompt side, not as hits", () => {
-    expect(formatCacheHit(meter({ cacheWriteTokens: 100, inputTokens: 0 }))).toBe("0%");
-    expect(cacheHitRatio({ cacheReadTokens: 300, cacheWriteTokens: 700, inputTokens: 0 })).toBeCloseTo(0.3);
-  });
-
-  it("returns null while no prompt accounting is known", () => {
-    expect(formatCacheHit(meter({}))).toBeNull();
-  });
-});
-
-describe("formatSessionCacheHit", () => {
-  it("applies the same boundary to the session totals", () => {
-    expect(formatSessionCacheHit(meter({ sessionCacheReadTokens: 12000, sessionInputTokens: 40 }))).toBe("99%");
     expect(
       formatSessionCacheHit(meter({ sessionCacheReadTokens: 1000, sessionCacheWriteTokens: 0, sessionInputTokens: 0 }))
     ).toBe("100%");
+  });
+
+  it("counts cache writes on the prompt side, not as hits", () => {
+    expect(formatSessionCacheHit(meter({ sessionCacheWriteTokens: 100, sessionInputTokens: 0 }))).toBe("0%");
+    expect(cacheHitRatio({ cacheReadTokens: 300, cacheWriteTokens: 700, inputTokens: 0 })).toBeCloseTo(0.3);
   });
 
   it("returns null while no session accounting is known", () => {

@@ -350,7 +350,7 @@ describe("TUI plugin", () => {
     expect(frame).not.toContain("session cache 33%");
   });
 
-  it("shows a tool-call-only step's cache accounting in the footer", async () => {
+  it("includes tool-call-only steps in the footer's session-only cache rate", async () => {
     const { handlers, slotPlugin, testRender, theme } = await createHarness();
 
     const messageUpdated = handlers.get("message.updated");
@@ -390,7 +390,7 @@ describe("TUI plugin", () => {
     // Step one publishes a reading at 10% cached.
     emitCompleted("message-1", 900, 100, "stop");
     // Step two ends in a tool call without streaming any text, so it has no reading of its
-    // own. Its 90% must still replace the stale 10%, and the session moves to 1000/2000.
+    // own. Its cache usage must still move the session total to 1000/2000.
     emitCompleted("message-2", 100, 900, "tool-calls");
 
     const slot = slotPlugin?.slots.session_prompt_right;
@@ -405,8 +405,9 @@ describe("TUI plugin", () => {
     await setup.flush();
     const frame = setup.captureCharFrame();
 
-    expect(frame).toContain("cache 90%");
     expect(frame).toContain("session cache 50%");
+    expect(frame.match(/cache \d+%/g)).toEqual(["cache 50%"]);
+    expect(frame).not.toContain("cache 90%");
     expect(frame).not.toContain("cache 10%");
   });
 

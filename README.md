@@ -15,9 +15,9 @@
 </div>
 
 ```
-╔═══════════════════════════════════════════════════╗
-║  92.4 TPS · avg 78.1 · 1,842 tok · cache 91%      ║
-╚═══════════════════════════════════════════════════╝
+╔═════════════════════════════════════════════════════╗
+║ 92.4 TPS · avg 78.1 · 1,842 tok · session cache 64% ║
+╚═════════════════════════════════════════════════════╝
 ```
 
 A live tokens-per-second meter plugin for OpenCode. Track AI token throughput in real-time with a configurable rolling window display. Only tracks **assistant role** messages — user and system messages are automatically excluded from metrics. File parts are also excluded from token counting.
@@ -33,7 +33,7 @@ A live tokens-per-second meter plugin for OpenCode. Track AI token throughput in
 - **Exact final totals on v2** — provider-reported token counts replace the heuristic estimate when the turn ends
 - **Calibrated estimate on v2** — the live token estimate is corrected against provider counts, learned and saved per model
 - **Subagent throughput** — while subagents run, the footer shows `TPS Σ … | main … | explore …` on both hosts
-- **Prompt cache hit rate** — `cache 91% · session cache 64%` once a step settles
+- **Session-wide prompt cache hit rate** — `session cache 64%` in the TUI footer and `/tps detail`, aggregated across reported steps
 - **Time to first token on v2** — in the detailed footer and the dashboard, and in the compact footer with `showTtft`
 - **Smart Filtering** — Counts only model output (text, reasoning and, on v2, tool-call arguments); excludes user prompts, tool results, patches, snapshots, and files
 - **Multi-Session Support** — Isolated tracking per session with automatic cleanup
@@ -298,7 +298,7 @@ Footer: `92.4 TPS · avg 78.1 · 1,842 tok · 00:23`
 | `showInstant` | `boolean` | `true` | Show instantaneous TPS in display |
 | `showTotalTokens` | `boolean` | `true` | Show total token count |
 | `showElapsed` | `boolean` | `false` | Show elapsed time |
-| `showCacheHit` | `boolean` | `true` | Show the prompt cache hit rate (provider-reported) |
+| `showCacheHit` | `boolean` | `true` | Show the provider-reported prompt cache hit rate, session-wide in the TUI |
 | `showTtft` | `boolean` | `false` | Show time to first token in the footer |
 | `format` | `string` | `"compact"` | Reserved: `compact`, `verbose` or `minimal` is accepted but does not change the display yet |
 | `minVisibleTPS` | `number` | `0` | Minimum TPS value to trigger display |
@@ -336,18 +336,19 @@ Enable visual feedback with color-coded TUI text based on token throughput speed
 
 OpenCode reports provider token usage as `{ input, output, reasoning, cache: { read, write } }`,
 where `input` EXCLUDES cache reads and writes. The meter therefore computes the prompt-side
-total as `input + cache.read + cache.write` and shows the cached share:
+total as `input + cache.read + cache.write`. The TUI footer and `/tps detail` show the cached
+share summed over all reported steps in the session:
 
 ```
-cache hit rate = cache.read / (input + cache.read + cache.write)
+session cache hit rate = sum(cache.read) / sum(input + cache.read + cache.write)
 ```
 
-The meter appends `cache 91%` to the footer once a provider-reported step has settled. During
-streaming no cache accounting is available yet, so the segment is omitted rather than shown as
-`0%` — nothing appears until the first step of a session has finished, which is expected and not
-a fault. Toggle with `showCacheHit` / `TPS_METER_SHOW_CACHE_HIT`. The figure is whole-percent,
-and rounding never crosses the 100 boundary: `12000` cached of `12040` prompt tokens reads `99%`,
-not `100%` — only a prompt with nothing left uncached reads `100%`.
+The meter appends `session cache 64%` once the first provider-reported step has settled and
+keeps the session rate visible while later steps stream. It is omitted until session prompt
+accounting is available. The ratio uses the summed token counts, not an average of per-step
+percentages. Toggle the footer segment with `showCacheHit` / `TPS_METER_SHOW_CACHE_HIT`.
+The figure is whole-percent, and rounding never crosses the 100 boundary: `12000` cached of
+`12040` session prompt tokens reads `99%`; only a fully cached session prompt total reads `100%`.
 
 ## Time to First Token
 
@@ -375,10 +376,10 @@ While output streams, the leading figure is the live rate:
 92.4 TPS · avg 78.1 · 1,842 tok
 ```
 
-Once the step settles it becomes the step's average, and the cache figures appear:
+Once the step settles it becomes the step's average, alongside the session-wide cache rate:
 
 ```
-78.1 TPS · avg 78.1 · 1,842 tok · cache 91% · session cache 64%
+78.1 TPS · avg 78.1 · 1,842 tok · session cache 64%
 ```
 
 `showElapsed: true` adds ` · 00:23`, and `showTtft: true` (v2) adds ` · ttft 1.2s`. On v2,
