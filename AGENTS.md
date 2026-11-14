@@ -26,7 +26,7 @@ OpenCode plugin that tracks AI token throughput in real-time. Displays TPS stati
 │   ├── tokenCounter.ts   # Heuristic token counting - shared v1/v2
 │   ├── config.ts         # Config loading (env + JSON + v2 inline options) - shared
 │   ├── constants.ts      # Shared constants
-│   ├── format.ts         # Shared meter text formatting (v1 + v2 render identically)
+│   ├── format.ts         # Shared full meter text + width-budget fitting for v2
 │   ├── agentName.ts      # v1 message-payload agent name extraction (server + TUI share it)
 │   ├── ui.ts             # v1 toast/throttling manager (no v2 equivalent)
 │   ├── v2/
@@ -83,15 +83,12 @@ OpenCode plugin that tracks AI token throughput in real-time. Displays TPS stati
    "server")`, which requires a `server()` function on whatever `./server` points at. The `/v2`
    exports are for programmatic `import` only. Locked in by the "resolves ./server and ./tui to
    modules valid on both plugin loaders" test in `src/__tests__/v2.test.ts`.
-7. **Register local builds at `<repo>/dist`, not the repo root.** The installed v2 resolves a
-   LOCAL plugin directory by file path — it tries `<dir>/server` then `<dir>/index` for the server
-   and `<dir>/tui` for the TUI (adding `.ts/.tsx/.js/.jsx/.mts/.mjs/.cts/.cjs`). It only consults
-   `package.json#exports` when the target is an npm package (`target.name` set), so the repo root
-   (which has no root `index.*`, only `exports`) is **silently skipped** — no error, no meter.
-   `dist/` is the correct target because it contains `index.mjs` (server) and `tui.mjs` (TUI).
-   Verified: `opencode.json` `plugin` → `file:///<repo>/opencode-tps-meter/dist` yields
-   `"features":{"server":true,"tui":true},"state":{"status":"active"}` from `/api/plugin`.
-   `cli.json` `plugins` and `tui.json` `plugin` should use the same `dist` path.
+7. **Install packaged builds into an independent plugin directory.** On current v2,
+   `~/.config/opencode/plugins/opencode-tps-meter/` is auto-discovered and its `package.json`
+   `exports` resolves the server and TUI parts. Build and pack in the checkout, then extract
+   the package contents into that installation directory. Verify `/api/plugin` reports both
+   features and an active state. The checkout is the development workspace, while the
+   installed package owns the runtime files.
 
 **Dual-host rule:** v1 files must keep working unchanged against `opencode`. v2 lives under `src/v2/`
 and shares only runtime-agnostic modules (tracker, tokenCounter, config, constants, format).
@@ -286,6 +283,15 @@ Same-millisecond spawns tie-break on session id. Capped at 4 entries with `+N` o
 line is coloured by `aggregateReading()` — live while anything generates, at the MEAN per-stream
 rate, because the slow/fast thresholds are per-stream figures. Line format:
 `TPS Σ 318 | main 63 | explore 91 | …` (note the space after Σ).
+
+**v2 footer width.** The meter is a sibling after `prompt.footer.status`, in the host's
+footer row. Use a zero flex basis, an intrinsic-text max width, and right alignment so the
+meter takes allocated elastic space instead of squeezing the host status. Read that computed
+width through `onSizeChange`, reserve two columns on each side, and fit complete statistics
+or aggregate entries to the remainder. Single-line clipping bounds the draw during resize;
+the width budget controls the content. Measure Unicode display columns, not string length.
+Keep the width budget independent of the fitted text to avoid resize feedback. Verify in a
+full host footer with left status and right hints, including parent-only width changes.
 
 Reactivity: family resolution is memoised on the set of sessions that have a reading
 (`sameIDs`) — never inside the snapshot-dependent memo, which re-runs up to ~125/s. Nothing

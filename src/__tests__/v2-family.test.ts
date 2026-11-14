@@ -22,6 +22,7 @@ import {
 } from "../v2/family.js";
 import type { V2Snapshot } from "../v2/meter.js";
 import { loadConfigSync } from "../config.js";
+import stringWidth from "string-width";
 import type { V2UnknownEvent } from "../v2/types.js";
 
 const stableEnv = {
@@ -407,6 +408,22 @@ describe("formatAggregateLine", () => {
     ]);
     expect(line).toContain("main 12");
   });
+
+  it("fits Unicode names to terminal columns while preserving duplicate-name ids", () => {
+    const rows = [
+      entry({ sessionID: "root", label: "main", isRoot: true, tps: 10, instantTps: 10 }),
+      entry({ sessionID: "a123", label: "非常长的调查代理👩‍💻(a123)", tps: 10, instantTps: 10 }),
+      entry({ sessionID: "b456", label: "非常长的调查代理👩‍💻(b456)", tps: 10, instantTps: 10 }),
+    ];
+    for (const columns of [0, 7, 10, 20, 36, 60, 120]) {
+      expect(stringWidth(formatAggregateLine(rows, columns))).toBeLessThanOrEqual(columns);
+    }
+    const line = formatAggregateLine(rows, 60);
+    expect(line).toContain("…");
+    expect(line).toContain("(a123)");
+    expect(line).toContain("(b456)");
+    expect(line).toStartWith("TPS Σ 30");
+  });
 });
 
 describe("aggregateReading", () => {
@@ -658,8 +675,8 @@ describe("v2 footer slot", () => {
     const { ensureSolidTransformPlugin } = await import("@opentui/solid/bun-plugin");
     ensureSolidTransformPlugin();
     const { setupTui } = await import("../v2/tui.js");
-    const { RGBA } = await import("@opentui/core");
-    const { testRender } = await import("@opentui/solid");
+    const { RGBA, BoxRenderable, TextRenderable } = await import("@opentui/core");
+    const { testRender, useRenderer, insert } = await import("@opentui/solid");
 
     const rgb = (r: number, g: number, b: number) => RGBA.fromInts(r, g, b, 255);
     const theme = {
@@ -713,15 +730,50 @@ describe("v2 footer slot", () => {
 
     const emit = (event: V2UnknownEvent) => handlers.get(event.type)?.(event);
 
-    async function render(sessionID: string) {
+    async function render(sessionID: string, hosted = false) {
       if (!footerRender) throw new Error("footer slot was not registered");
       const render = footerRender;
-      const setup = await testRender(() => render({ sessionID }) as never, { width: 160, height: 3 });
+      let host: {
+        row: InstanceType<typeof BoxRenderable>;
+        spinner: InstanceType<typeof TextRenderable>;
+        status: InstanceType<typeof TextRenderable>;
+      } | undefined;
+      const setup = await testRender(() => {
+        if (!hosted) return render({ sessionID }) as never;
+        // OpenCode 2.3.0 prompt/index.tsx: the status and plugin are siblings in a
+        // full-width row. The host status is allowed to shrink all the way to zero.
+        const renderer = useRenderer();
+        const row = new BoxRenderable(renderer, {
+          width: "100%", flexDirection: "row", justifyContent: "space-between", gap: 2,
+        });
+        const left = new BoxRenderable(renderer, { flexGrow: 1, flexShrink: 1, minWidth: 0 });
+        const status = new BoxRenderable(renderer, { flexDirection: "row", gap: 1, flexGrow: 1 });
+        const spinner = new TextRenderable(renderer, { content: "......." });
+        const label = new TextRenderable(renderer, { content: "esc interrupt" });
+        status.add(spinner);
+        status.add(label);
+        left.add(status);
+        row.add(left);
+        insert(row, () => render({ sessionID }));
+        row.add(new TextRenderable(renderer, { content: "143.2K (29%)", flexShrink: 0 }));
+        row.add(new TextRenderable(renderer, { content: "ctrl+p commands", flexShrink: 0 }));
+        host = { row, spinner, status: label };
+        return row;
+      }, { width: 160, height: 3 });
       renderers.push(setup);
       await setup.flush();
       return {
         setup,
         frame: () => setup.captureCharFrame(),
+        setHostStatus: (text: string, spinning: boolean) => {
+          if (!host) throw new Error("host fixture was not mounted");
+          host.status.content = text;
+          host.spinner.visible = spinning;
+        },
+        setFooterWidth: (width: number) => {
+          if (!host) throw new Error("host fixture was not mounted");
+          host.row.width = width;
+        },
         /** fg colour of the span carrying the meter text, as 0-255 ints. */
         color: () => {
           for (const line of setup.captureSpans().lines) {
@@ -744,6 +796,78 @@ describe("v2 footer slot", () => {
     family: () => ["root", "subA", "subB"],
     get: (id) => (id === "subA" ? { agent: "explore" } : id === "subB" ? { agent: "general" } : undefined),
   };
+
+  it("keeps the complete host footer readable and the meter right-aligned through resizes", async () => {
+    const ids = ["root", "subA", "subB", "subC", "subD", "subE"];
+    const footer = await createFooter({
+      root: () => "root",
+      family: () => ids,
+      get: (id) => ({ agent: `长名称代理🔎-${id}-investigation` }),
+      status: () => "running",
+    });
+    for (const id of ids) streamed(id, "each agent streams a meaningful amount of text").forEach(footer.emit);
+    await delay(60);
+    const view = await footer.render("root", true);
+    for (const width of [160, 120, 100, 80, 60, 80, 100, 120, 160]) {
+      view.setup.resize(width, 3);
+      await view.setup.flush();
+      const frame = view.frame();
+      expect(frame, `width=${width}`).toContain("....... esc interrupt");
+      expect(frame, `width=${width}`).toContain("143.2K (29%)  ctrl+p commands");
+      const line = frame.split("\n").find((line) => line.includes("esc interrupt"))!;
+      expect(line.trimEnd().endsWith("ctrl+p commands"), `width=${width}`).toBe(true);
+      expect(frame.split("\n").filter((line) => line.trim()).length, `width=${width}`).toBe(1);
+      const meter = line.indexOf("TPS");
+      if (meter !== -1) {
+        const statusEnd = line.indexOf("esc interrupt") + "esc interrupt".length;
+        expect(line.slice(statusEnd, meter), `width=${width}`).toMatch(/^ {2,}$/);
+        if (width >= 100) {
+          expect(line.slice(0, line.indexOf("143.2K")).trimEnd(), `width=${width}`).toMatch(/TPS Σ .*\+\d+$/);
+        }
+        expect(line.slice(0, line.indexOf("143.2K")), `width=${width}`).toMatch(/ {2,}$/);
+      }
+    }
+    view.setup.resize(80, 3);
+    view.setHostStatus("esc again to interrupt", true);
+    await view.setup.flush();
+    expect(view.frame()).toContain("....... esc again to interrupt");
+    expect(view.frame()).toContain("143.2K (29%)  ctrl+p commands");
+
+    view.setup.resize(160, 3);
+    view.setHostStatus("D:/OpenCode/project", false);
+    view.setFooterWidth(80); // A side panel narrows the composer without resizing the terminal.
+    await view.setup.flush();
+    const sidebarFrame = view.frame().split("\n").find((line) => line.includes("D:/OpenCode/project"))!;
+    expect(sidebarFrame).toContain("143.2K (29%)  ctrl+p commands");
+    expect(stringWidth(sidebarFrame.trimEnd())).toBe(80);
+    view.setFooterWidth(160);
+    await view.setup.flush();
+    expect(view.frame()).toContain("TPS Σ");
+  });
+
+  it("restores full session statistics after a narrow host footer expands", async () => {
+    const footer = await createFooter(undefined);
+    streamed("root", "streaming enough output to produce a reading").forEach(footer.emit);
+    const ended = stepEnded("root", "stop", { output: 40, reasoning: 0 });
+    ended.data!.tokens = { input: 40, output: 40, reasoning: 0, cache: { read: 960, write: 0 } };
+    footer.emit(ended);
+    const view = await footer.render("root", true);
+    expect(view.frame()).toContain("session cache 96%");
+    expect(view.frame()).toContain("avg");
+    for (const width of [120, 100, 80, 60, 160]) {
+      view.setup.resize(width, 3);
+      await view.setup.flush();
+      const frame = view.frame();
+      expect(frame).toContain("....... esc interrupt");
+      expect(frame).toContain("143.2K (29%)  ctrl+p commands");
+      expect(frame).not.toMatch(/TPS.*\.\.\./);
+      if (width === 160) {
+        expect(frame).toContain("avg");
+        expect(frame).toContain("40 tok");
+        expect(frame).toContain("session cache 96%");
+      }
+    }
+  });
 
   it("renders main plus live subagents, with Σ covering everything generating", async () => {
     const footer = await createFooter(familyTree);

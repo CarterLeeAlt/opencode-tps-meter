@@ -11,8 +11,10 @@ import {
   cacheHitRatio,
   formatCachePercent,
   formatSessionCacheHit,
+  fitMeterText,
   type MeterReading,
 } from "../format.js";
+import { defaultConfig } from "../config.js";
 
 /** A settled reading with no prompt accounting, filled in per test. */
 function meter(partial: Partial<MeterReading>): MeterReading {
@@ -60,4 +62,16 @@ describe("formatSessionCacheHit", () => {
     // The latest step's accounting is a separate field set and must not leak in here.
     expect(formatSessionCacheHit(meter({ cacheReadTokens: 1000, inputTokens: 0 }))).toBeNull();
   });
+});
+
+it("fits complete fields while prioritizing TPS and session cache", () => {
+  const reading = meter({
+    active: true, instantTps: 0.4, avgTps: 1.6, totalTokens: 26,
+    sessionCacheReadTokens: 960, sessionInputTokens: 40,
+  });
+  expect(fitMeterText(reading, defaultConfig, 100)).toBe("0.4 TPS · avg 1.6 · 26 tok · session cache 96%");
+  expect(fitMeterText(reading, defaultConfig, 28)).toBe("0.4 TPS · session cache 96%");
+  expect(fitMeterText(reading, defaultConfig, 7)).toBe("0.4 TPS");
+  expect(fitMeterText(reading, defaultConfig, 6)).toBe("");
+  expect(fitMeterText(reading, { ...defaultConfig, showCacheHit: false }, 28)).not.toContain("cache");
 });

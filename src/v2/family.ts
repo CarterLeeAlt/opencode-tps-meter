@@ -9,6 +9,7 @@
  */
 
 import { DEFAULT_ROLLING_WINDOW_MS } from "../constants.js";
+import stringWidth from "string-width";
 
 /**
  * Minimal reading shape the aggregation needs.
@@ -231,7 +232,7 @@ function generatingTotals(entries: readonly AgentMeterEntry[]): { sum: number; c
  * summarise their results) its throughput is real and counts. Entries that are lingering or
  * sitting in a tool call show their frozen average and contribute nothing.
  */
-export function formatAggregateLine(entries: readonly AgentMeterEntry[]): string {
+export function formatAggregateLine(entries: readonly AgentMeterEntry[], columns = Infinity): string {
   const { sum } = generatingTotals(entries);
   const shown = entries.slice(0, MAX_METER_ENTRIES);
   const parts = shown.map((entry) => `${entry.label} ${Math.round(entry.tps)}`);
@@ -239,7 +240,47 @@ export function formatAggregateLine(entries: readonly AgentMeterEntry[]): string
   if (overflow > 0) {
     parts.push(`+${overflow}`);
   }
-  return `TPS Σ ${Math.round(sum)} | ${parts.join(" | ")}`;
+  const prefix = `TPS Σ ${Math.round(sum)}`;
+  const full = `${prefix} | ${parts.join(" | ")}`;
+  if (stringWidth(full) <= columns) return full;
+  if (stringWidth(prefix) > columns) return "";
+
+  // Reserve the total, values and +N first, then distribute the label budget. Reducing
+  // the longest label first keeps short names readable and the existing agent order stable.
+  for (let count = shown.length; count > 0; count--) {
+    const selected = shown.slice(0, count);
+    const tail = entries.length > count ? ` | +${entries.length - count}` : "";
+    const widths = selected.map((entry) => stringWidth(entry.label));
+    const minima = selected.map((entry, index) => Math.min(widths[index]!, /\([^()]{4}\)$/.test(entry.label) ? 8 : 4));
+    const fixed = stringWidth(prefix + tail + selected.map((entry) => ` |  ${Math.round(entry.tps)}`).join(""));
+    const budget = columns - fixed;
+    if (minima.reduce((total, width) => total + width, 0) > budget) continue;
+    while (widths.reduce((total, width) => total + width, 0) > budget) {
+      let longest = -1;
+      for (let index = 0; index < widths.length; index++) {
+        if (widths[index]! > minima[index]! && (longest === -1 || widths[index]! > widths[longest]!)) longest = index;
+      }
+      widths[longest] = widths[longest]! - 1;
+    }
+    return prefix + selected.map((entry, index) => ` | ${shortenLabel(entry.label, widths[index]!)} ${Math.round(entry.tps)}`).join("") + tail;
+  }
+  const summary = `${prefix} | +${entries.length}`;
+  return stringWidth(summary) <= columns ? summary : prefix;
+}
+
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+/** Keeps graphemes intact and preserves the distinguishing id on duplicate agent names. */
+function shortenLabel(label: string, columns: number): string {
+  if (stringWidth(label) <= columns) return label;
+  const suffix = label.match(/\([^()]{4}\)$/)?.[0] ?? "";
+  const limit = columns - stringWidth(`…${suffix}`);
+  let prefix = "";
+  for (const { segment } of graphemes.segment(suffix ? label.slice(0, -suffix.length) : label)) {
+    if (stringWidth(prefix + segment) > limit) break;
+    prefix += segment;
+  }
+  return `${prefix}…${suffix}`;
 }
 
 /**

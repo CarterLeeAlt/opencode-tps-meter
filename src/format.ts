@@ -7,6 +7,7 @@
  */
 
 import type { Config } from "./types.js";
+import stringWidth from "string-width";
 
 /** Minimum shape needed to render a meter reading, satisfied by v1 and v2 snapshots alike. */
 export interface MeterReading {
@@ -122,4 +123,16 @@ export function formatMeterText(reading: MeterReading, config: Config): string {
   }
 
   return parts.length > 0 ? parts.join(" · ") : "TPS meter";
+}
+
+/** Fits whole fields into terminal columns, retaining TPS and session cache longest. */
+export function fitMeterText(reading: MeterReading, config: Config, columns: number): string {
+  const options = { ...config };
+  const omitted = [undefined, "showElapsed", "showAverage", "showTotalTokens", "showCacheHit"] as const;
+  for (const field of omitted) {
+    if (field) options[field] = false;
+    const text = formatMeterText(reading, options);
+    if (stringWidth(text) <= columns) return text;
+  }
+  return "";
 }

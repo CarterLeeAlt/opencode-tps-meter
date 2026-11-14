@@ -123,18 +123,14 @@ On v1, the meter renders in the session prompt area via `opencode-tps-meter/tui`
 
 On v2, TUI plugins are registered in the global `~/.config/opencode/cli.json` under `plugins` (auto-migrated from v1's `tui.json`). Per OpenCode's loader spec, a package with an `exports` map is resolved via `./tui` or `./server` and **never** falls back to `exports["."]`, so this package publishes both.
 
-**Registering a local checkout on v2:** point the entry at the built `dist` directory, not the
-repository root, and use the same path in `opencode.json` and `cli.json`:
+**Installing a packaged fork on v2:** build the checkout with `bun run build`, then create
+the install archive with `bun pm pack --ignore-scripts`. Extract the archive's `package/`
+contents into `~/.config/opencode/plugins/opencode-tps-meter/`, with `package.json` and
+`dist/` directly inside that directory. OpenCode discovers the installed package and uses
+its `./server` and `./tui` exports. Keep one active installation of this plugin.
 
-```json
-{ "plugins": ["file:///abs/path/to/opencode-tps-meter/dist"] }
-```
-
-For a local directory the loader resolves files by path (`<dir>/server` or `<dir>/index` for the
-server, `<dir>/tui` for the TUI, trying the usual extensions) and never reads `package.json`
-`exports`. The repository root has no `index.*` of its own, so it is skipped without an error;
-`dist/` contains both `index.mjs` and `tui.mjs`. `exports` is only used for npm-package specs
-(`"opencode-tps-meter"`).
+The installation contains its own built files. To update it, rebuild, pack and install the
+new archive, then use `/reload` to refresh the plugin.
 
 **Note on the v2 TUI module shape:** v2 requires `{ id, setup }`. Plugins exporting only v1's
 `{ id, tui }` are rejected by the loader. This package's TUI module exports both keys, so it satisfies
@@ -382,6 +378,12 @@ Once the step settles it becomes the step's average, alongside the session-wide 
 78.1 TPS · avg 78.1 · 1,842 tok · session cache 64%
 ```
 
+On v2 the meter stays right-aligned within the footer's allocated space, with two blank
+terminal columns on either side. Resizing the terminal or opening a side panel recalculates
+that space. Narrow layouts omit elapsed time, average TPS and token count first, retaining
+TPS and session cache longest; the full line returns when space is available. A space too
+small for one complete statistic shows no meter text. `/tps detail` keeps the full statistics.
+
 `showElapsed: true` adds ` · 00:23`, and `showTtft: true` (v2) adds ` · ttft 1.2s`. On v2,
 `/tps detailed` appends tool time, time to first token and hidden overhead, e.g.
 ` · tools 4.2s · ttft 1.2s · +120 ovh`.
@@ -392,6 +394,10 @@ short session-id suffix:
 ```
 TPS Σ 318 | main 63 | explore(9B5c) 91 | explore(A1dF) 86 | general 78 | +2
 ```
+
+The v2 aggregate fits complete entries to the same width budget. Long names use an ellipsis
+without splitting Unicode graphemes, duplicate-name ids stay visible, and additional entries
+collapse into `+N`. The total includes every generating entry, including collapsed ones.
 
 ### Toast (v1, opt-in with `toastFallback`)
 

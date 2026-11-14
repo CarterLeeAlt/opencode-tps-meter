@@ -19,9 +19,11 @@
  */
 
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
+import type { BoxRenderable } from "@opentui/core";
+import stringWidth from "string-width";
 import { AGGREGATE_TICK_INTERVAL_MS } from "../constants.js";
 import { defaultConfig, loadConfigSync } from "../config.js";
-import { formatMeterText, formatSessionCacheHit } from "../format.js";
+import { fitMeterText, formatMeterText, formatSessionCacheHit } from "../format.js";
 import type { Config } from "../types.js";
 import {
   aggregateReading,
@@ -359,10 +361,36 @@ function MeterView(props: {
   // Coloured by what the line shows: the aggregate's own state, or the selected session.
   const reading = () => aggregate()?.reading ?? current() ?? IDLE_READING;
 
+  const [columns, setColumns] = createSignal(0);
+  const inset = 2;
+  const fittedLine = createMemo(() => {
+    const available = Math.max(0, columns() - inset * 2);
+    if (stringWidth(line()) <= available) return line();
+    if (aggregate()) return formatAggregateLine(entries(), available);
+    const snapshot = current();
+    return snapshot ? fitMeterText(snapshot, props.config, available) : "";
+  });
+
   return (
-    <Show when={line()} fallback={<box flexShrink={0} />}>
-      <box flexDirection="row" flexShrink={0}>
-        <text fg={colorForSnapshot(props.theme, props.config, reading())}>{line()}</text>
+    <Show when={line()}>
+      <box
+        flexDirection="row"
+        flexBasis={0}
+        flexGrow={1}
+        flexShrink={1}
+        minWidth={0}
+        maxWidth={stringWidth(line()) + inset * 2}
+        height={1}
+        overflow="hidden"
+        justifyContent="flex-end"
+        onSizeChange={function (this: BoxRenderable) {
+          const width = this.width;
+          queueMicrotask(() => setColumns(width));
+        }}
+      >
+        <text wrapMode="none" truncate fg={colorForSnapshot(props.theme, props.config, reading())}>
+          {fittedLine() ? `  ${fittedLine()}  ` : ""}
+        </text>
       </box>
     </Show>
   );
@@ -786,15 +814,9 @@ export function setupTui(ctx: V2TuiContext): V2Cleanup | void {
 
     disposers.push(
       ctx.ui.slot({
-        // AFTER, not append. The host's own child inside prompt.footer.status is a box with
-        // flexGrow:1, and while a turn is running it renders a second flexGrow:1 box holding
-        // the spinner and the "esc interrupt" hint. Appending places the meter INSIDE that
-        // boundary, after the greedy child, so it collapses to zero width the moment anything
-        // runs — thinking, tool calls, or compaction — and only reappears once idle.
-        //
-        // `after` makes the meter a SIBLING of the status box rather than a child, so the
-        // greedy layout cannot reach it, while the box's flexGrow:1 still pushes the meter to
-        // the right of the spinner. MeterView's flexShrink={0} holds its width.
+        // The meter shares the footer row with the host status and right-hand hints.
+        // Its zero flex basis reserves no intrinsic text width: it takes elastic space,
+        // right-aligns within it and fits whole fields to its computed terminal columns.
         after: "prompt.footer.status",
         render: (input) => (
           <MeterView
