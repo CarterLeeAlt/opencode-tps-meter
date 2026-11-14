@@ -285,13 +285,14 @@ rate, because the slow/fast thresholds are per-stream figures. Line format:
 `TPS Σ 318 | main 63 | explore 91 | …` (note the space after Σ).
 
 **v2 footer width.** The meter is a sibling after `prompt.footer.status`, in the host's
-footer row. Use a zero flex basis, an intrinsic-text max width, and right alignment so the
-meter takes allocated elastic space instead of squeezing the host status. Read that computed
-width through `onSizeChange`, reserve two columns on each side, and fit complete statistics
-or aggregate entries to the remainder. Single-line clipping bounds the draw during resize;
-the width budget controls the content. Measure Unicode display columns, not string length.
-Keep the width budget independent of the fitted text to avoid resize feedback. Verify in a
-full host footer with left status and right hints, including parent-only width changes.
+footer row. Size it from the row width minus the host siblings' intrinsic content widths,
+padding, margins and existing gaps; flexible blank space belongs to the available budget.
+Keep the existing right edge and spacing. Re-measure after renderer frames so host text and
+parent-only width changes are included. Show the full line whenever it fits, otherwise fit
+complete statistics or aggregate entries. The budget must be independent of fitted text.
+Measure Unicode display columns, not string length. Verify both no-overlap and full-field
+retention in the full host footer, including exact right spacing. Use OpenTUI 0.8.4 for
+development checks to match OpenCode 2.3.0's renderer and public layout-style getters.
 
 Reactivity: family resolution is memoised on the set of sessions that have a reading
 (`sameIDs`) — never inside the snapshot-dependent memo, which re-runs up to ~125/s. Nothing

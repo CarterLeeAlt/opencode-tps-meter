@@ -675,7 +675,7 @@ describe("v2 footer slot", () => {
     const { ensureSolidTransformPlugin } = await import("@opentui/solid/bun-plugin");
     ensureSolidTransformPlugin();
     const { setupTui } = await import("../v2/tui.js");
-    const { RGBA, BoxRenderable, TextRenderable } = await import("@opentui/core");
+    const { RGBA, BoxRenderable, TextRenderable, Renderable } = await import("@opentui/core");
     const { testRender, useRenderer, insert } = await import("@opentui/solid");
 
     const rgb = (r: number, g: number, b: number) => RGBA.fromInts(r, g, b, 255);
@@ -735,7 +735,7 @@ describe("v2 footer slot", () => {
       const render = footerRender;
       let host: {
         row: InstanceType<typeof BoxRenderable>;
-        spinner: InstanceType<typeof TextRenderable>;
+        spinner: InstanceType<typeof Renderable>;
         status: InstanceType<typeof TextRenderable>;
       } | undefined;
       const setup = await testRender(() => {
@@ -748,7 +748,17 @@ describe("v2 footer slot", () => {
         });
         const left = new BoxRenderable(renderer, { flexGrow: 1, flexShrink: 1, minWidth: 0 });
         const status = new BoxRenderable(renderer, { flexDirection: "row", gap: 1, flexGrow: 1 });
-        const spinner = new TextRenderable(renderer, { content: "......." });
+        // The host spinner is a measured, paint-only Renderable rather than a text node.
+        class HostSpinner extends Renderable {
+          constructor() {
+            super(renderer, {});
+            this.setMeasureProvider(() => ({ width: 7, height: 1 }));
+          }
+          protected renderSelf(buffer: import("@opentui/core").OptimizedBuffer) {
+            buffer.drawText(".......", this.screenX, this.screenY, theme.text.default);
+          }
+        }
+        const spinner = new HostSpinner();
         const label = new TextRenderable(renderer, { content: "esc interrupt" });
         status.add(spinner);
         status.add(label);
@@ -845,7 +855,7 @@ describe("v2 footer slot", () => {
     expect(view.frame()).toContain("TPS Σ");
   });
 
-  it("restores full session statistics after a narrow host footer expands", async () => {
+  it("uses available space for full statistics and preserves the original right gap", async () => {
     const footer = await createFooter(undefined);
     streamed("root", "streaming enough output to produce a reading").forEach(footer.emit);
     const ended = stepEnded("root", "stop", { output: 40, reasoning: 0 });
@@ -861,12 +871,20 @@ describe("v2 footer slot", () => {
       expect(frame).toContain("....... esc interrupt");
       expect(frame).toContain("143.2K (29%)  ctrl+p commands");
       expect(frame).not.toMatch(/TPS.*\.\.\./);
-      if (width === 160) {
+      if (width >= 120) {
         expect(frame).toContain("avg");
         expect(frame).toContain("40 tok");
         expect(frame).toContain("session cache 96%");
+        expect(frame).toMatch(/session cache 96% {2}143\.2K/);
       }
     }
+    view.setHostStatus("D:\\OpenCode\\BlankProject", false);
+    view.setup.resize(120, 3);
+    await view.setup.flush();
+    expect(view.frame()).toContain("D:\\OpenCode\\BlankProject");
+    expect(view.frame()).toContain("avg");
+    expect(view.frame()).toContain("40 tok");
+    expect(view.frame()).toMatch(/session cache 96% {2}143\.2K/);
   });
 
   it("renders main plus live subagents, with Σ covering everything generating", async () => {

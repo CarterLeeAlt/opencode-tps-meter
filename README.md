@@ -378,9 +378,10 @@ Once the step settles it becomes the step's average, alongside the session-wide 
 78.1 TPS · avg 78.1 · 1,842 tok · session cache 64%
 ```
 
-On v2 the meter stays right-aligned within the footer's allocated space, with two blank
-terminal columns on either side. Resizing the terminal or opening a side panel recalculates
-that space. Narrow layouts omit elapsed time, average TPS and token count first, retaining
+On v2 the meter stays right-aligned with the host's existing spacing. Its budget excludes
+the other footer items' actual content and spacing, so unused flexible space is available
+for full statistics. Resizing the terminal, changing status text or opening a side panel
+recalculates that budget. Narrow layouts omit elapsed time, average TPS and token count first, retaining
 TPS and session cache longest; the full line returns when space is available. A space too
 small for one complete statistic shows no meter text. `/tps detail` keeps the full statistics.
 

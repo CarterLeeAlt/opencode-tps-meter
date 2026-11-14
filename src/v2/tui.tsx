@@ -20,6 +20,7 @@
 
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import type { BoxRenderable } from "@opentui/core";
+import { useRenderer } from "@opentui/solid";
 import stringWidth from "string-width";
 import { AGGREGATE_TICK_INTERVAL_MS } from "../constants.js";
 import { defaultConfig, loadConfigSync } from "../config.js";
@@ -35,6 +36,7 @@ import {
 } from "./family.js";
 import { createMeter, type V2Snapshot } from "./meter.js";
 import { createLedger, type V2Ledger } from "./ledger.js";
+import { availableFooterWidth } from "./footer-width.js";
 import type {
   V2AnyMeterEvent,
   V2Cleanup,
@@ -362,9 +364,16 @@ function MeterView(props: {
   const reading = () => aggregate()?.reading ?? current() ?? IDLE_READING;
 
   const [columns, setColumns] = createSignal(0);
-  const inset = 2;
+  const renderer = useRenderer();
+  let meterBox: BoxRenderable | undefined;
+  const measure = () => {
+    if (!meterBox || meterBox.isDestroyed) return;
+    setColumns(availableFooterWidth(meterBox));
+  };
+  renderer.on("frame", measure);
+  onCleanup(() => renderer.off("frame", measure));
   const fittedLine = createMemo(() => {
-    const available = Math.max(0, columns() - inset * 2);
+    const available = columns();
     if (stringWidth(line()) <= available) return line();
     if (aggregate()) return formatAggregateLine(entries(), available);
     const snapshot = current();
@@ -374,22 +383,17 @@ function MeterView(props: {
   return (
     <Show when={line()}>
       <box
+        ref={(box) => { meterBox = box; }}
         flexDirection="row"
-        flexBasis={0}
-        flexGrow={1}
+        width={Math.min(stringWidth(line()), columns())}
         flexShrink={1}
         minWidth={0}
-        maxWidth={stringWidth(line()) + inset * 2}
         height={1}
         overflow="hidden"
         justifyContent="flex-end"
-        onSizeChange={function (this: BoxRenderable) {
-          const width = this.width;
-          queueMicrotask(() => setColumns(width));
-        }}
       >
         <text wrapMode="none" truncate fg={colorForSnapshot(props.theme, props.config, reading())}>
-          {fittedLine() ? `  ${fittedLine()}  ` : ""}
+          {fittedLine()}
         </text>
       </box>
     </Show>
@@ -815,8 +819,8 @@ export function setupTui(ctx: V2TuiContext): V2Cleanup | void {
     disposers.push(
       ctx.ui.slot({
         // The meter shares the footer row with the host status and right-hand hints.
-        // Its zero flex basis reserves no intrinsic text width: it takes elastic space,
-        // right-aligns within it and fits whole fields to its computed terminal columns.
+        // Its width budget excludes only occupied host content and the existing gaps,
+        // so full statistics use the available space before fields are compacted.
         after: "prompt.footer.status",
         render: (input) => (
           <MeterView
