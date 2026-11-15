@@ -1,6 +1,7 @@
 name: Publish to NPM
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     tags: ['v*']
@@ -30,6 +31,20 @@ jobs:
 
       - name: Build package
         run: bun run build
+
+      - name: Pack build artifact
+        run: |
+          mkdir -p artifacts
+          bun pm pack --destination artifacts
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-tps-meter-${{ github.sha }}
+          path: artifacts/*.tgz
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
 
       # A prerelease must NOT take the `latest` dist-tag, or every existing user gets it
       # from a plain `npm install`. npm-publish defaults `tag` to `latest` regardless of
