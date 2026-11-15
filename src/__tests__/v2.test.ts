@@ -1129,7 +1129,7 @@ describe("v2 theme normalization", () => {
     const render = claims[0]?.render;
     expect(typeof render).toBe("function");
 
-    const setup = await testRender(
+    await using setup = await testRender(
       () => (render as (input: unknown) => unknown)({ sessionID: "ses-flat" }),
       { width: 80, height: 5 },
     );
@@ -1169,7 +1169,7 @@ describe("v2 theme normalization", () => {
     const footer = claims.find((claim) => claim.after === "prompt.footer.status");
     expect(footer).toBeDefined();
 
-    const setup = await testRender(() => footer!.render({ sessionID: "ses-fg" }), {
+    await using setup = await testRender(() => footer!.render({ sessionID: "ses-fg" }), {
       width: 80,
       height: 5,
     });
@@ -1560,7 +1560,7 @@ describe("v2 optional surfaces", () => {
 
     const sidebar = claims.find((claim) => claim.append === "sidebar.content");
     expect(sidebar).toBeDefined();
-    const setup = await testRender(
+    await using setup = await testRender(
       () =>
         sidebar!.render({
           get sessionID() {
@@ -1652,7 +1652,6 @@ describe("v2 optional surfaces", () => {
       expect(selected.match(/general/g)?.length).toBe(1);
     } finally {
       setSystemTime();
-      setup.renderer.destroy();
       await (cleanup as unknown as () => void | Promise<void>)?.();
     }
   });
@@ -1708,7 +1707,7 @@ describe("v2 optional surfaces", () => {
 
     const footer = claims.find((claim) => claim.after === "prompt.footer.status");
     expect(footer).toBeDefined();
-    const setup = await testRender(() => footer!.render({ sessionID: "ses-ttft" }), {
+    await using setup = await testRender(() => footer!.render({ sessionID: "ses-ttft" }), {
       width: 100,
       height: 5,
     });
@@ -1851,7 +1850,7 @@ describe("v2 optional surfaces", () => {
         .find((layer) => layer.mode === "global");
       expect(global?.commands?.some((command) => command.bind === "escape,q"), label).toBe(false);
 
-      const page = await testRender(() => harness.dashboard.render({}), { width: 80, height: 20 });
+      await using page = await testRender(() => harness.dashboard.render({}), { width: 80, height: 20 });
       await page.flush();
 
       const backLayer = harness.layers
@@ -1870,7 +1869,6 @@ describe("v2 optional surfaces", () => {
       expect(harness.navigated.at(-1), label).toEqual(initial);
       expect(harness.route(), label).toEqual(initial);
 
-      page.renderer.destroy();
       await (harness.cleanup as () => void | Promise<void>)();
     }
   });

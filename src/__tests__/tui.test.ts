@@ -30,6 +30,8 @@ interface RegisteredSlotPlugin {
 }
 
 describe("TUI plugin", () => {
+  const pendingDisposers: Array<() => void | Promise<void>> = [];
+
   beforeEach(() => {
     for (const key of Object.keys(stableEnv) as Array<keyof typeof stableEnv>) {
       originalEnv.set(key, process.env[key]);
@@ -37,16 +39,22 @@ describe("TUI plugin", () => {
     }
   });
 
-  afterEach(() => {
-    for (const key of Object.keys(stableEnv) as Array<keyof typeof stableEnv>) {
-      const previous = originalEnv.get(key);
-      if (previous === undefined) {
-        delete process.env[key];
-      } else {
-        process.env[key] = previous;
+  afterEach(async () => {
+    try {
+      for (const dispose of pendingDisposers.splice(0)) {
+        await dispose();
       }
+    } finally {
+      for (const key of Object.keys(stableEnv) as Array<keyof typeof stableEnv>) {
+        const previous = originalEnv.get(key);
+        if (previous === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = previous;
+        }
+      }
+      originalEnv.clear();
     }
-    originalEnv.clear();
   });
 
   async function createHarness() {
@@ -59,6 +67,12 @@ describe("TUI plugin", () => {
 
     const handlers = new Map<string, (event: unknown) => void>();
     const disposeCallbacks: Array<() => void | Promise<void>> = [];
+    const dispose = async () => {
+      for (const callback of disposeCallbacks.splice(0)) {
+        await callback();
+      }
+    };
+    pendingDisposers.push(dispose);
     let slotPlugin: RegisteredSlotPlugin | undefined;
     const color = RGBA.fromInts(255, 255, 255, 255);
     const theme = {
@@ -118,7 +132,7 @@ describe("TUI plugin", () => {
       fingerprint: "test",
     } as never);
 
-    return { handlers, slotPlugin, testRender, theme, disposeCallbacks };
+    return { handlers, slotPlugin, testRender, theme, dispose };
   }
 
   it("renders an empty persistent session prompt slot before stats exist", async () => {
@@ -129,7 +143,7 @@ describe("TUI plugin", () => {
       throw new Error("session_prompt_right slot was not registered");
     }
 
-    const setup = await testRender(() => slot({ theme }, { session_id: "session-empty" }), { width: 80, height: 5 });
+    await using setup = await testRender(() => slot({ theme }, { session_id: "session-empty" }), { width: 80, height: 5 });
     await setup.flush();
 
     expect(setup.captureCharFrame()).not.toContain("TPS");
@@ -176,7 +190,7 @@ describe("TUI plugin", () => {
       throw new Error("session_prompt_right slot was not registered");
     }
 
-    const setup = await testRender(() => slot({ theme }, { session_id: "session-1" }), { width: 80, height: 5 });
+    await using setup = await testRender(() => slot({ theme }, { session_id: "session-1" }), { width: 80, height: 5 });
     await setup.flush();
     const frame = setup.captureCharFrame();
 
@@ -280,7 +294,7 @@ describe("TUI plugin", () => {
       throw new Error("session_prompt_right slot was not registered");
     }
 
-    const setup = await testRender(() => slot({ theme }, { session_id: "session-dedupe" }), { width: 80, height: 5 });
+    await using setup = await testRender(() => slot({ theme }, { session_id: "session-dedupe" }), { width: 80, height: 5 });
     await setup.flush();
     const frame = setup.captureCharFrame();
 
@@ -339,7 +353,7 @@ describe("TUI plugin", () => {
       throw new Error("session_prompt_right slot was not registered");
     }
 
-    const setup = await testRender(() => slot({ theme }, { session_id: "session-cache" }), {
+    await using setup = await testRender(() => slot({ theme }, { session_id: "session-cache" }), {
       width: 200,
       height: 5,
     });
@@ -398,7 +412,7 @@ describe("TUI plugin", () => {
       throw new Error("session_prompt_right slot was not registered");
     }
 
-    const setup = await testRender(() => slot({ theme }, { session_id: "session-tool" }), {
+    await using setup = await testRender(() => slot({ theme }, { session_id: "session-tool" }), {
       width: 200,
       height: 5,
     });
@@ -467,7 +481,7 @@ describe("TUI plugin", () => {
         throw new Error("session_prompt_right slot was not registered");
       }
 
-      const setup = await testRender(() => slot({ theme }, { session_id: "session-cont" }), {
+      await using setup = await testRender(() => slot({ theme }, { session_id: "session-cont" }), {
         width: 200,
         height: 5,
       });
@@ -581,7 +595,7 @@ describe("TUI plugin", () => {
       throw new Error("session_prompt_right slot was not registered");
     }
 
-    const setup = await testRender(() => slot({ theme }, { session_id: "session-zero-token-dedupe" }), { width: 80, height: 5 });
+    await using setup = await testRender(() => slot({ theme }, { session_id: "session-zero-token-dedupe" }), { width: 80, height: 5 });
     await setup.flush();
     const frame = setup.captureCharFrame();
 
@@ -657,7 +671,7 @@ describe("TUI plugin", () => {
       throw new Error("session_prompt_right slot was not registered");
     }
 
-    const setup = await testRender(() => slot({ theme }, { session_id: "session-a" }), { width: 80, height: 5 });
+    await using setup = await testRender(() => slot({ theme }, { session_id: "session-a" }), { width: 80, height: 5 });
     await setup.flush();
     const frame = setup.captureCharFrame();
 
@@ -745,7 +759,7 @@ describe("TUI plugin", () => {
       throw new Error("session_prompt_right slot was not registered");
     }
 
-    const setup = await testRender(() => slot({ theme }, { session_id: "session-official" }), { width: 80, height: 5 });
+    await using setup = await testRender(() => slot({ theme }, { session_id: "session-official" }), { width: 80, height: 5 });
     await setup.flush();
     const frame = setup.captureCharFrame();
 
@@ -835,7 +849,7 @@ describe("TUI plugin", () => {
       throw new Error("session_prompt_right slot was not registered");
     }
 
-    const setup = await testRender(() => slot({ theme }, { session_id: "session-tiny-chunks" }), { width: 80, height: 5 });
+    await using setup = await testRender(() => slot({ theme }, { session_id: "session-tiny-chunks" }), { width: 80, height: 5 });
     await setup.flush();
     const frame = setup.captureCharFrame();
 
@@ -844,7 +858,7 @@ describe("TUI plugin", () => {
   });
 
   it("lets a stalled stream's live rate fall instead of holding its last value", async () => {
-    const { disposeCallbacks, handlers, slotPlugin, testRender, theme } = await createHarness();
+    const { handlers, slotPlugin, testRender, theme } = await createHarness();
     const messageUpdated = handlers.get("message.updated");
     const partDelta = handlers.get("message.part.delta");
     if (!messageUpdated || !partDelta) {
@@ -889,7 +903,7 @@ describe("TUI plugin", () => {
     if (!slot) {
       throw new Error("session_prompt_right slot was not registered");
     }
-    const view = await testRender(() => slot({ theme }, { session_id: "session-stall" }), { width: 80, height: 5 });
+    await using view = await testRender(() => slot({ theme }, { session_id: "session-stall" }), { width: 80, height: 5 });
     const liveTps = async () => {
       await view.flush();
       return Number(/([0-9.]+) TPS/.exec(view.captureCharFrame())?.[1] ?? "NaN");
@@ -902,15 +916,10 @@ describe("TUI plugin", () => {
     const falling = await liveTps();
     expect(falling).toBeGreaterThan(0);
     expect(falling).toBeLessThan(live);
-
-    view.renderer.destroy();
-    for (const callback of disposeCallbacks) {
-      await callback();
-    }
   });
 
   it("publishes the first live snapshot as soon as a second chunk gives it a rate", async () => {
-    const { disposeCallbacks, handlers, slotPlugin, testRender, theme } = await createHarness();
+    const { handlers, slotPlugin, testRender, theme } = await createHarness();
 
     const messageUpdated = handlers.get("message.updated");
     const partDelta = handlers.get("message.part.delta");
@@ -975,20 +984,16 @@ describe("TUI plugin", () => {
 
     await delay(40);
 
-    const delayed = await testRender(() => slot({ theme }, { session_id: "session-live-latency" }), { width: 80, height: 5 });
+    await using delayed = await testRender(() => slot({ theme }, { session_id: "session-live-latency" }), { width: 80, height: 5 });
     await delayed.flush();
     const frame = delayed.captureCharFrame();
 
     expect(frame).toContain("TPS");
     expect(frame).toContain("2 tok");
-
-    for (const callback of disposeCallbacks) {
-      await callback();
-    }
   });
 
   it("keeps the latest streamed stats visible after the session idles", async () => {
-    const { disposeCallbacks, handlers, slotPlugin, testRender, theme } = await createHarness();
+    const { handlers, slotPlugin, testRender, theme } = await createHarness();
 
     const messageUpdated = handlers.get("message.updated");
     const partDelta = handlers.get("message.part.delta");
@@ -1061,20 +1066,16 @@ describe("TUI plugin", () => {
       throw new Error("session_prompt_right slot was not registered");
     }
 
-    const setup = await testRender(() => slot({ theme }, { session_id: "session-idle-persist" }), { width: 80, height: 5 });
+    await using setup = await testRender(() => slot({ theme }, { session_id: "session-idle-persist" }), { width: 80, height: 5 });
     await setup.flush();
     const frame = setup.captureCharFrame();
 
     expect(frame).toContain("TPS");
     expect(frame).toContain("2 tok");
-
-    for (const callback of disposeCallbacks) {
-      await callback();
-    }
   });
 
   it("keeps streamed stats visible when an assistant message finishes for a tool call", async () => {
-    const { disposeCallbacks, handlers, slotPlugin, testRender, theme } = await createHarness();
+    const { handlers, slotPlugin, testRender, theme } = await createHarness();
 
     const messageUpdated = handlers.get("message.updated");
     const partDelta = handlers.get("message.part.delta");
@@ -1155,21 +1156,17 @@ describe("TUI plugin", () => {
       throw new Error("session_prompt_right slot was not registered");
     }
 
-    const setup = await testRender(() => slot({ theme }, { session_id: "session-tool-call-persist" }), { width: 80, height: 5 });
+    await using setup = await testRender(() => slot({ theme }, { session_id: "session-tool-call-persist" }), { width: 80, height: 5 });
     await setup.flush();
     const frame = setup.captureCharFrame();
 
     expect(frame).toContain("TPS");
     expect(frame).toContain("1 tok");
-
-    for (const callback of disposeCallbacks) {
-      await callback();
-    }
   });
 
   it("does not create an idle snapshot before the startup delay", async () => {
     process.env.TPS_METER_INITIAL_DISPLAY_DELAY_MS = "1000";
-    const { disposeCallbacks, handlers, slotPlugin, testRender, theme } = await createHarness();
+    const { handlers, slotPlugin, testRender, theme } = await createHarness();
 
     const messageUpdated = handlers.get("message.updated");
     const partDelta = handlers.get("message.part.delta");
@@ -1227,27 +1224,21 @@ describe("TUI plugin", () => {
       throw new Error("session_prompt_right slot was not registered");
     }
 
-    const setup = await testRender(() => slot({ theme }, { session_id: "session-idle-before-delay" }), { width: 80, height: 5 });
+    await using setup = await testRender(() => slot({ theme }, { session_id: "session-idle-before-delay" }), { width: 80, height: 5 });
     await setup.flush();
     const frame = setup.captureCharFrame();
 
     expect(frame).not.toContain("TPS");
     expect(frame).not.toContain("1 tok");
-
-    for (const callback of disposeCallbacks) {
-      await callback();
-    }
   });
 
   it("removes event handlers on lifecycle dispose", async () => {
-    const { disposeCallbacks, handlers } = await createHarness();
+    const { dispose, handlers } = await createHarness();
 
     // message.updated, message.part.delta, message.part.updated, session.idle,
     // plus the session.created/updated pair feeding multi-session attribution.
     expect(handlers.size).toBe(6);
-    for (const callback of disposeCallbacks) {
-      await callback();
-    }
+    await dispose();
 
     expect(handlers.size).toBe(0);
   });

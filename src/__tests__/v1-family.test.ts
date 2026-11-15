@@ -69,7 +69,7 @@ describe("v1 multi-session footer", () => {
 
   afterEach(async () => {
     for (const setup of renderers.splice(0)) {
-      setup.renderer.destroy();
+      await setup.dispose();
     }
     for (const dispose of pendingDisposers.splice(0)) {
       await dispose();

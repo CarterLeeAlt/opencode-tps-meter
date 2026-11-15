@@ -655,7 +655,7 @@ describe("v2 footer slot", () => {
 
   afterEach(async () => {
     for (const setup of renderers.splice(0)) {
-      setup.renderer.destroy();
+      await setup.dispose();
     }
     for (const cleanup of cleanups.splice(0)) {
       await cleanup();
