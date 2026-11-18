@@ -36,7 +36,7 @@ import {
 } from "./family.js";
 import { createMeter, type V2Snapshot } from "./meter.js";
 import { createLedger, type V2Ledger } from "./ledger.js";
-import { availableFooterWidth } from "./footer-width.js";
+import { availableFooterWidth, footerLayoutWidth } from "./footer-width.js";
 import type {
   V2AnyMeterEvent,
   V2Cleanup,
@@ -364,20 +364,68 @@ function MeterView(props: {
   const reading = () => aggregate()?.reading ?? current() ?? IDLE_READING;
 
   const [columns, setColumns] = createSignal(0);
+  const [layoutWidth, setLayoutWidth] = createSignal(0);
   const renderer = useRenderer();
   let meterBox: BoxRenderable | undefined;
   const measure = () => {
     if (!meterBox || meterBox.isDestroyed) return;
-    setColumns(availableFooterWidth(meterBox));
+    const nextLayoutWidth = footerLayoutWidth(meterBox);
+    const nextColumns = availableFooterWidth(meterBox);
+    // Publish the budget first, then the outer width. The second signal invalidates the
+    // settled cache after both values describe the same layout pass; reversing this order
+    // would cache a full line against a new row width but an old column budget.
+    setColumns(nextColumns);
+    setLayoutWidth(nextLayoutWidth);
   };
   renderer.on("frame", measure);
   onCleanup(() => renderer.off("frame", measure));
+
+  // Once a single-session turn has settled, its text is immutable until the next meter
+  // update. Do not re-run field fitting on every renderer frame: the host footer can report
+  // transient widths while flex layout settles, which otherwise makes `avg` appear and
+  // disappear even though neither the reading nor the terminal changed.
+  let settledTextKey = "";
+  let settledText = "";
+  let settledWidth = 0;
+  let settledLayoutWidth = 0;
   const fittedLine = createMemo(() => {
-    const available = columns();
-    if (stringWidth(line()) <= available) return line();
-    if (aggregate()) return formatAggregateLine(entries(), available);
+    const text = line();
     const snapshot = current();
-    return snapshot ? fitMeterText(snapshot, props.config, available) : "";
+    const aggregateLine = aggregate();
+    const settled = snapshot !== undefined && !snapshot.active && aggregateLine === undefined;
+    const currentLayoutWidth = layoutWidth();
+    const available = columns();
+    if (settled && text === settledTextKey && currentLayoutWidth === settledLayoutWidth &&
+        (settledWidth === 0 || settledWidth <= available)) {
+      return settledText;
+    }
+
+    let fitted: string;
+    if (stringWidth(text) <= available) {
+      fitted = text;
+    } else if (aggregateLine !== undefined) {
+      fitted = formatAggregateLine(entries(), available);
+    } else {
+      fitted = snapshot ? fitMeterText(snapshot, props.config, available) : "";
+    }
+
+    if (settled && available > 0 && currentLayoutWidth > 0) {
+      settledTextKey = text;
+      settledText = fitted;
+      settledWidth = stringWidth(fitted);
+      settledLayoutWidth = currentLayoutWidth;
+    } else if (!settled) {
+      settledTextKey = "";
+      settledText = "";
+      settledWidth = 0;
+      settledLayoutWidth = 0;
+    }
+    return fitted;
+  });
+  const displayWidth = createMemo(() => {
+    const text = line();
+    fittedLine();
+    return Math.min(stringWidth(text), columns());
   });
 
   return (
@@ -385,7 +433,7 @@ function MeterView(props: {
       <box
         ref={(box) => { meterBox = box; }}
         flexDirection="row"
-        width={Math.min(stringWidth(line()), columns())}
+        width={displayWidth()}
         flexShrink={1}
         minWidth={0}
         height={1}

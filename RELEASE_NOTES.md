@@ -1,3 +1,22 @@
+## v0.4.3 — Stable settled footer layout
+
+Fixes a v2 TUI footer issue where a settled meter could repeatedly switch between the full
+statistics line and the compact line while OpenCode was idle.
+
+### Fixed
+
+- **Settled footer no longer flickers.** A completed single-session reading now keeps its field
+  selection and display width while its content is unchanged, so transient host layout
+  measurements cannot make `avg` appear and disappear.
+- **Footer width measurement handles slot wrappers.** The available-width calculation excludes
+  the complete renderable branch containing the meter instead of accidentally measuring the
+  meter's own text as occupied host content.
+
+### Tests
+
+- Added a regression test that repeatedly renders a settled meter inside a wrapped footer slot
+  and verifies that the output remains stable.
+
 ## v0.4.2 — TTFT in the footer, dashboard escape, cache rounding
 
 Time to first token can now sit in the compact footer, the dashboard closes with Escape, and

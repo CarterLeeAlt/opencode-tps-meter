@@ -730,7 +730,7 @@ describe("v2 footer slot", () => {
 
     const emit = (event: V2UnknownEvent) => handlers.get(event.type)?.(event);
 
-    async function render(sessionID: string, hosted = false) {
+    async function render(sessionID: string, hosted = false, wrapped = false) {
       if (!footerRender) throw new Error("footer slot was not registered");
       const render = footerRender;
       let host: {
@@ -764,7 +764,18 @@ describe("v2 footer slot", () => {
         status.add(label);
         left.add(status);
         row.add(left);
-        insert(row, () => render({ sessionID }));
+        if (wrapped) {
+          // Some host versions put a slot claim inside a renderable wrapper. The
+          // width calculator must exclude that whole branch, not just the meter
+          // node itself, or the fitted text becomes self-referential.
+          const slotWrapper = new BoxRenderable(renderer, {
+            flexDirection: "row", flexShrink: 1, minWidth: 0,
+          });
+          insert(slotWrapper, () => render({ sessionID }));
+          row.add(slotWrapper);
+        } else {
+          insert(row, () => render({ sessionID }));
+        }
         row.add(new TextRenderable(renderer, { content: "143.2K (29%)", flexShrink: 0 }));
         row.add(new TextRenderable(renderer, { content: "ctrl+p commands", flexShrink: 0 }));
         host = { row, spinner, status: label };
@@ -885,6 +896,23 @@ describe("v2 footer slot", () => {
     expect(view.frame()).toContain("avg");
     expect(view.frame()).toContain("40 tok");
     expect(view.frame()).toMatch(/session cache 96% {2}143\.2K/);
+  });
+
+  it("keeps a settled meter stable when the slot has a renderable wrapper", async () => {
+    const footer = await createFooter(undefined);
+    streamed("root", "streaming enough output to produce a settled reading").forEach(footer.emit);
+    footer.emit(stepEnded("root", "stop", { output: 40, reasoning: 0 }));
+
+    const view = await footer.render("root", true, true);
+    const lines: string[] = [];
+    for (let i = 0; i < 8; i++) {
+      await view.setup.renderOnce();
+      await view.setup.flush();
+      lines.push(view.frame().split("\n").find((line) => line.includes("TPS")) ?? "");
+    }
+
+    expect(new Set(lines).size).toBe(1);
+    expect(lines[0]).toContain("avg");
   });
 
   it("renders main plus live subagents, with Σ covering everything generating", async () => {
