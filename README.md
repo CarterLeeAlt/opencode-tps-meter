@@ -84,6 +84,9 @@ For manual installation, use the generated `dist/` directory in your TUI config 
 }
 ```
 
+Precompiled `.tgz` packages are attached to GitHub Releases for users who do not want to build
+the checkout locally.
+
 ### OpenCode v2 (`opencode2`)
 
 Use the same locally built checkout and register its `dist/` directory:
