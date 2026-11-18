@@ -43,7 +43,6 @@
     "build": "bun run build.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "bun run build",
     "typecheck:bench": "tsc -p bench/tsconfig.json",
     "bench": "bun bench/hotpath.ts && bun bench/publish.ts && bun bench/profile.ts && bun bench/memory.ts && bun bench/v1path.ts"
   },

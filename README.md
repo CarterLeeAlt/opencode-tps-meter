@@ -9,7 +9,6 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Bun](https://img.shields.io/badge/Bun-Runtime-000?logo=bun&logoColor=white)](https://bun.sh)
 [![OpenCode](https://img.shields.io/badge/OpenCode-Plugin-7C3AED?logo=code&logoColor=white)](https://opencode.ai)
-[![NPM Version](https://img.shields.io/npm/v/opencode-tps-meter.svg)](https://www.npmjs.com/package/opencode-tps-meter)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 </div>
@@ -68,35 +67,36 @@ One package supports both OpenCode generations. They install as separate binarie
 
 ### OpenCode v1
 
-Install with OpenCode's plugin installer so the persistent TUI entrypoint is registered:
+Build the plugin from this GitHub repository:
 
 ```bash
-opencode plug opencode-tps-meter@latest
+git clone https://github.com/CarterLeeAlt/opencode-tps-meter.git
+cd opencode-tps-meter
+bun install
+bun run build
 ```
 
-For manual installation, add the package to your TUI config (`~/.config/opencode/tui.json` or `tui.jsonc`) for persistent display:
+For manual installation, use the generated `dist/` directory in your TUI config (`~/.config/opencode/tui.json` or `tui.jsonc`) for persistent display:
 
 ```json
 {
-  "plugin": ["opencode-tps-meter@latest"]
+  "plugin": ["file:///path/to/opencode-tps-meter/dist"]
 }
 ```
 
 ### OpenCode v2 (`opencode2`)
 
-```bash
-npm install opencode-tps-meter
-```
+Use the same locally built checkout and register its `dist/` directory:
 
 v2 replaced layered `tui.json(c)` files with a single global `cli.json`, and renamed the plugin config key to `plugins`. Register in `opencode.json`:
 
 ```json
 {
-  "plugins": ["opencode-tps-meter@latest"]
+  "plugins": ["file:///path/to/opencode-tps-meter/dist"]
 }
 ```
 
-The single package name is all you need — the default export carries both plugin shapes, so v1 reads `server` and v2 reads `setup`.
+The built package carries both plugin shapes, so v1 reads `server` and v2 reads `setup`.
 
 > **Do not use subpath specifiers in `plugins`.** v2 treats every string in that array as an npm package name or a local path, so `"opencode-tps-meter/v2"` is not resolved as a subpath — it is attempted as a package install and fails. The `opencode-tps-meter/v2` and `/v2/tui` exports exist for programmatic `import` only.
 
@@ -106,7 +106,7 @@ v2 also accepts inline options, which take priority over config files and enviro
 {
   "plugins": [
     {
-      "package": "opencode-tps-meter@latest",
+      "package": "file:///path/to/opencode-tps-meter/dist",
       "options": { "showElapsed": true, "enableColorCoding": true }
     }
   ]
