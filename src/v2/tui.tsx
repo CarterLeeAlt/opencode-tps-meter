@@ -387,6 +387,7 @@ function MeterView(props: {
   let settledTextKey = "";
   let settledText = "";
   let settledWidth = 0;
+  let settledBoxWidth = 0;
   let settledLayoutWidth = 0;
   const fittedLine = createMemo(() => {
     const text = line();
@@ -413,11 +414,17 @@ function MeterView(props: {
       settledTextKey = text;
       settledText = fitted;
       settledWidth = stringWidth(fitted);
+      // Reserve the raw line when it fits, but never grow the box again from a
+      // transiently larger budget in the same outer footer layout. Growing the box
+      // would steal a column from the host path/status text and make its ellipsis
+      // position oscillate even when the meter itself is unchanged.
+      settledBoxWidth = Math.min(stringWidth(text), available);
       settledLayoutWidth = currentLayoutWidth;
     } else if (!settled) {
       settledTextKey = "";
       settledText = "";
       settledWidth = 0;
+      settledBoxWidth = 0;
       settledLayoutWidth = 0;
     }
     return fitted;
@@ -425,6 +432,12 @@ function MeterView(props: {
   const displayWidth = createMemo(() => {
     const text = line();
     fittedLine();
+    const snapshot = current();
+    if (snapshot !== undefined && !snapshot.active && aggregate() === undefined &&
+        settledTextKey === text && settledLayoutWidth === layoutWidth() && settledBoxWidth > 0) {
+      settledBoxWidth = Math.min(settledBoxWidth, columns());
+      return settledBoxWidth;
+    }
     return Math.min(stringWidth(text), columns());
   });
 

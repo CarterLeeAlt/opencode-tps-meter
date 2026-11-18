@@ -16,6 +16,8 @@ statistics line and the compact line while OpenCode was idle.
 
 - Added a regression test that repeatedly renders a settled meter inside a wrapped footer slot
   and verifies that the output remains stable.
+- Settled meters also keep their container width stable, preventing the host path/status ellipsis
+  from shifting horizontally during transient per-frame width changes.
 
 ## v0.4.2 — TTFT in the footer, dashboard escape, cache rounding
 
@@ -243,3 +245,14 @@ OpenCode v2 (note the `plugins` key):
 
 - [README](https://github.com/ChiR24/opencode-tps-meter#readme)
 - [Full Documentation](https://github.com/ChiR24/opencode-tps-meter/blob/main/README.md)
+## v0.4.4 — Stable settled footer width
+
+Further stabilizes the v2 TUI footer when OpenCode is idle.
+
+### Fixed
+
+- **Host footer text no longer shifts horizontally.** A settled meter now keeps its container
+  width stable as well as its selected fields, so transient per-frame width changes cannot move
+  the host path/status ellipsis back and forth.
+
+## v0.4.3 — Stable settled footer layout
